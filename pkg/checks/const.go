@@ -15,27 +15,5 @@ limitations under the License.
 */
 package checks
 
-type QuayAuth struct {
-	username string
-	password string
-}
-
-// NewQuayAuth returns a new instance of QuayAuth
-func NewQuayAuth(username string, password string) *QuayAuth {
-	auth := &QuayAuth{
-		username: username,
-		password: password,
-	}
-
-	return auth
-}
-
-// getUsername return a QuayAuth username
-func (a *QuayAuth) getUsername() string {
-	return a.username
-}
-
-// getPassword return a QuayAuth password
-func (a *QuayAuth) getPassword() string {
-	return a.password
-}
+const GITHUB_REPO = 1
+const GITLAB_REPO = 2

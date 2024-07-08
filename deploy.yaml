@@ -1,0 +1,59 @@
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: release-service-availability-monitor-app
+  name: release-service-availability-monitor-service
+  namespace: release-service
+spec:
+  type: ClusterIP
+  ports:
+  - name: metricshttp
+    port: 8080
+    protocol: TCP
+    targetPort: 8080
+  selector:
+    app: release-service-availability-monitor-app
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: release-service-availability-monitor-deployment
+  namespace: release-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: release-service-availability-monitor-app
+  template:
+    metadata:
+      labels:
+        app: release-service-availability-monitor-app
+    spec:
+      containers:
+      - name: release-service-availability-metrics
+        image: quay.io/lmendes/release-metrics:6959e29b4d1f56fb2d253a843c2b6f7983d037d1
+        command: [/bin/metrics-server]
+        envFrom:
+          - configMapRef:
+              name: release-service-availability-monitor-config
+          - secretRef:
+              name: release-service-availability-monitor-secret
+        ports:
+        - containerPort: 8080
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: release-service-availabiliy-monitor
+  labels:
+    app: release-service-availability-monitor-app
+  namespace: release-service
+spec:
+  endpoints:
+    - path: /metrics
+      port: metricshttp
+      scheme: http
+  selector:
+    matchLabels:
+      app: release-service-availability-monitor-app
