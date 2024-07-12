@@ -19,13 +19,15 @@ import (
 	"context"
 	"fmt"
 	"log"
+    "strings"
 	"net/http"
 	"os"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/hacbs-release/release-availability-metrics/pkg/checks"
+	"github.com/hacbs-release/release-availability-metrics/pkg/config"
+	"github.com/hacbs-release/release-availability-metrics/pkg/metrics"
+	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/containers/storage/pkg/reexec"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -34,83 +36,80 @@ import (
 var (
 	pollInterval int
 
-	quay   *checks.QuayCheck
-	github *checks.GitCheck
-	gitlab *checks.GitCheck
+	git  []*checks.GitCheck
+	quay []*checks.QuayCheck
 
 	logger = log.New(os.Stdout, "metrics-server: ", log.LstdFlags)
 )
 
-func collectAndRecord(ctx context.Context) {
-	// service checks
-	serviceChecks := strings.Split(os.Getenv("SERVICE_CHECKS"), ",")
-
+func collectAndRecord(ctx context.Context, cfg *config.Config) {
 	// default internal
-	pollInterval, _ = strconv.Atoi(os.Getenv("SERVICE_POLL_INTERVAL"))
+	pollInterval = cfg.Service.PollInterval
 	if pollInterval == 0 {
 		pollInterval = 60
 	}
+	logger.Println(fmt.Sprintf("Poll interval: %d * time.Second", pollInterval))
 
-	// load quay.io configs
-	quayUsername := os.Getenv("QUAY_USERNAME")
-	quayPassword := os.Getenv("QUAY_PASSWORD")
-	quayImagePullSpec := os.Getenv("QUAY_IMAGE_PULLSPEC")
-	quayImageTags := os.Getenv("QUAY_IMAGE_TAGS")
 
-	// load github configs
-	githubRepoUrl := os.Getenv("GITHUB_REPO_URL")
-	githubRevision := os.Getenv("GITHUB_REVISION")
-	githubPath := os.Getenv("GITHUB_PATH")
-	githubToken := os.Getenv("GITHUB_TOKEN")
+    // registering metrics
+    metric := metrics.NewGaugeMetric(cfg.Service.MetricPrefix, []string{"application", "reason", "status"})
+    prometheus.MustRegister(metric.Metric)
 
-	// load gitlab configs
-	gitlabRepoUrl := os.Getenv("GITLAB_REPO_URL")
-	gitlabRevision := os.Getenv("GITLAB_REVISION")
-	gitlabPath := os.Getenv("GITLAB_PATH")
-	gitlabToken := os.Getenv("GITLAB_TOKEN")
+    // instance git checks, if defined
+    if len(cfg.Checks.Git) != 0 {
+        for i := 0; i < len(cfg.Checks.Git); i++ {
+            gitCheck := cfg.Checks.Git[i]
+            // get the token from env if not specified in config
+            token := os.Getenv(fmt.Sprintf("%s_GIT_TOKEN", strings.ToUpper(gitCheck.Name )))
+            if token == "" {
+                token = gitCheck.Token
+            }
+            newCheck := checks.NewGitCheck(
+                cfg.Service.MetricPrefix,
+                gitCheck.Name,
+                token,
+                gitCheck.Url,
+                gitCheck.Revision,
+                gitCheck.Path,
+                logger,
+                metric)
+            git = append(git, newCheck) 
+        }
+    }
 
-	logger.Println(fmt.Sprintf("environment loaded. Poll interval: %d * time.Second", pollInterval))
+    // instance quay checks, if defined
+    if len(cfg.Checks.Quay) != 0 {
 
+        for i := 0; i < len(cfg.Checks.Quay); i++ {
+            quayCheck := cfg.Checks.Quay[i]
+            password := os.Getenv(fmt.Sprintf("%s_QUAY_PASSWORD", strings.ToUpper(quayCheck.Name )))
+            if password == "" {
+                password = quayCheck.Password
+            }
+            auth := checks.NewQuayAuth(quayCheck.Username, quayCheck.Password)
+            quay = append(quay, checks.NewQuayCheck(
+                ctx,
+                auth,
+                quayCheck.Name,
+                quayCheck.PullSpec,
+                quayCheck.Tags,
+                logger))
+        }
+    }
 	go func() {
 		for {
-			// run checks
-			for i := 0; i < len(serviceChecks); i++ {
-				switch svc := serviceChecks[i]; svc {
-				case "quay":
-					if quay == nil {
-						auth := checks.NewQuayAuth(quayUsername, quayPassword)
-						quay = checks.NewQuayCheck(
-							ctx,
-							auth,
-							quayImagePullSpec,
-							strings.Split(quayImageTags, ","),
-							logger)
-					}
-					quay.Check()
-				case "github":
-					if github == nil {
-						github = checks.NewGitCheck(
-							"github",
-							githubToken,
-							githubRepoUrl,
-							githubRevision,
-							githubPath,
-							logger)
-					}
-					github.Check()
-				case "gitlab":
-					if gitlab == nil {
-						gitlab = checks.NewGitCheck(
-							"gitlab",
-							gitlabToken,
-							gitlabRepoUrl,
-							gitlabRevision,
-							gitlabPath,
-							logger)
-					}
-					gitlab.Check()
-				}
-			}
+			// run git checks, if defined
+            if len(git) != 0 {
+                for i := 0; i < len(git); i++ {
+                    git[i].Check()
+                }
+            }
+			// run quay checks, if defined
+            if len(quay) != 0 {
+                for i := 0; i < len(quay); i++ {
+                    quay[i].Check()
+                }
+            }
 			time.Sleep(time.Duration(pollInterval) * time.Second)
 		}
 	}()
@@ -119,20 +118,32 @@ func collectAndRecord(ctx context.Context) {
 func main() {
 	var ctx context.Context
 
+    ctx = context.Background()
+
 	if reexec.Init() {
 		return
 	}
 
-	ctx = context.Background()
-	collectAndRecord(ctx)
+    cfgFilePath := "server-config.yaml"
+    if len(os.Args) > 1 {
+        cfgFilePath = os.Args[1]
+    }
+
+	logger.Println(fmt.Sprintf("loading config from: %s ", cfgFilePath))
+	cfg, err := config.LoadConfig(cfgFilePath)
+    if err != nil {
+        panic(err)
+    }
+
+	collectAndRecord(ctx, &cfg)
 	http.Handle("/metrics", promhttp.Handler())
 
-	listenPort := os.Getenv("SERVICE_LISTEN_PORT")
-	if listenPort == "" {
-		listenPort = "8080"
+	listenPort := cfg.Service.ListenPort
+	if listenPort == 0 {
+		listenPort = 8080
 	}
-	logger.Println(fmt.Sprintf("server starting at :%s", listenPort))
-	err := http.ListenAndServe(fmt.Sprintf(":%s", listenPort), nil)
+	logger.Println(fmt.Sprintf("server starting at :%d", listenPort))
+	err = http.ListenAndServe(fmt.Sprintf(":%d", listenPort), nil)
 	if err != nil {
 		logger.Println(err.Error())
 	}

@@ -43,10 +43,10 @@ type QuayCheck struct {
 }
 
 // MewQuayCheck creates a new QuayCheck instance.
-func NewQuayCheck(ctx context.Context, auth *QuayAuth, image string, tags []string, log *log.Logger) *QuayCheck {
+func NewQuayCheck(ctx context.Context, auth *QuayAuth, name string, image string, tags []string, log *log.Logger) *QuayCheck {
 	log.Println("creating new Quay check")
 	newCheck := &QuayCheck{
-		name:  "quay",
+		name:  name,
 		ctx:   ctx,
 		auth:  *auth,
 		image: image,

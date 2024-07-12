@@ -16,18 +16,52 @@ limitations under the License.
 package metrics
 
 import (
+    "fmt"
+    "strings"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
 var (
 	applicationAvailability = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "release_service_application_availability",
-			Help: "Release Service application availability",
+			Name: "release_service_availability",
+			Help: "Release Service availability",
 		},
 		[]string{"application", "reason", "status"},
 	)
 )
+
+type GaugeMetric struct {
+    Prefix string
+    Labels []string 
+    Metric *prometheus.GaugeVec
+
+}
+
+func NewGaugeMetric(prefix string, labels []string) (GaugeMetric) {
+    newGaugeMetric := GaugeMetric{
+        Prefix: prefix,
+        Labels: labels,
+    }
+
+    opts :=	prometheus.GaugeOpts{
+            Name: fmt.Sprintf("%s_check", strings.ToLower(prefix)),
+			Help: fmt.Sprintf("%s check", prefix),
+	}
+    newGauge := prometheus.NewGaugeVec(opts, labels)
+    newGaugeMetric.Metric = newGauge
+
+    return newGaugeMetric
+}
+
+func (gm *GaugeMetric) Record(metadata []string, value float64) {
+    // building labels
+    labels := map[string]string{}
+    for k, v := range gm.Labels {
+        labels[v] = metadata[k]
+    }
+    gm.Metric.With(prometheus.Labels(labels)).Set(value)
+}
 
 // RecordAvailabilityData exports the check data to be read by Prometheus
 func RecordAvailabilityData(application string, reason string, status string, value float64) {
@@ -41,5 +75,5 @@ func RecordAvailabilityData(application string, reason string, status string, va
 
 // init
 func init() {
-	prometheus.MustRegister(applicationAvailability)
+//	prometheus.MustRegister(applicationAvailability)
 }

@@ -36,24 +36,28 @@ import (
 
 // defines the GitCheck type.
 type GitCheck struct {
+    prefix   string
 	name     string
 	token    string
 	url      string
 	revision string
 	path     string
 	log      *log.Logger
+    metric   metrics.GaugeMetric
 }
 
 // NewGitCheck returns a new instance of GitCheck.
-func NewGitCheck(name string, token string, url string, revision string, path string,
-	log *log.Logger) *GitCheck {
+func NewGitCheck(prefix string, name string, token string, url string, revision string, path string,
+	log *log.Logger, metric metrics.GaugeMetric) *GitCheck {
 	newCheck := &GitCheck{
+        prefix:   prefix,
 		name:     name,
 		token:    token,
 		url:      url,
 		revision: revision,
 		path:     path,
 		log:      log,
+        metric:   metric,
 	}
 	return newCheck
 }
@@ -70,8 +74,21 @@ func (c *GitCheck) getInsecureClient() *http.Client {
 }
 
 // cloneAndGetTree clone a git repository and returns a new instance of object.Tree.
-func (c *GitCheck) cloneAndGetTree(cloneOptions *git.CloneOptions) (*object.Tree, error) {
+func (c *GitCheck) cloneAndGetTree() (*object.Tree, error) {
 	var tree *object.Tree
+
+	insecureClient := c.getInsecureClient()
+	client.InstallProtocol("https", githttp.NewClient(insecureClient))
+	cloneOptions := &git.CloneOptions{
+		URL: c.url,
+		Auth: &githttp.BasicAuth{
+			Username: "oauth2",
+			Password: c.token,
+		},
+		ReferenceName: plumbing.ReferenceName(c.revision),
+		Progress:      io.Discard,
+		Depth:         1,
+	}
 
 	r, err := git.Clone(memory.NewStorage(), nil, cloneOptions)
 	if err != nil {
@@ -102,20 +119,7 @@ func (c *GitCheck) cloneAndGetTree(cloneOptions *git.CloneOptions) (*object.Tree
 
 // statFile checks the existence of a file in the git repositry.
 func (c *GitCheck) statFile() (CheckResult, error) {
-	insecureClient := c.getInsecureClient()
-	client.InstallProtocol("https", githttp.NewClient(insecureClient))
-	cloneOptions := &git.CloneOptions{
-		URL: c.url,
-		Auth: &githttp.BasicAuth{
-			Username: "oauth2",
-			Password: c.token,
-		},
-		ReferenceName: plumbing.ReferenceName(c.revision),
-		Progress:      io.Discard,
-		Depth:         1,
-	}
-
-	tree, err := c.cloneAndGetTree(cloneOptions)
+	tree, err := c.cloneAndGetTree()
 	if err != nil {
 		c.log.Println(fmt.Sprintf("%s check failed (%s)", c.name, err.Error()))
 		return CheckResult{1, "Failed", err.Error()}, err
@@ -140,7 +144,11 @@ func (c *GitCheck) Check() float64 {
 	if err != nil {
 		reason = err.Error()
 	}
-	metrics.RecordAvailabilityData(c.name, reason, res.status, res.code)
+    c.metric.Record([]string{c.name, reason, res.status}, res.code)
 
 	return res.code
+}
+
+func (c *GitCheck) GetMetric() (metrics.GaugeMetric) {
+    return c.metric
 }

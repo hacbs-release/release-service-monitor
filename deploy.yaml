@@ -33,14 +33,24 @@ spec:
       containers:
       - name: release-service-availability-metrics
         image: quay.io/lmendes/release-metrics:6959e29b4d1f56fb2d253a843c2b6f7983d037d1
-        command: [/bin/metrics-server]
+        command: ["/bin/metrics-server", "/config/server-config.yaml"]
         envFrom:
-          - configMapRef:
-              name: release-service-availability-monitor-config
           - secretRef:
               name: release-service-availability-monitor-secret
         ports:
         - containerPort: 8080
+        volumeMounts:
+          - name: config
+            mountPath: "/config"
+            readOnly: true
+      volumes:
+      - name: config
+        configMap:
+          name: release-service-availability-monitor-config
+          items:
+          - key: server-config.yaml
+            value: server-config.yaml
+
 ---
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
