@@ -19,9 +19,9 @@ import (
 	"context"
 	"fmt"
 	"log"
-    "strings"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/hacbs-release/release-availability-metrics/pkg/checks"
@@ -50,66 +50,71 @@ func collectAndRecord(ctx context.Context, cfg *config.Config) {
 	}
 	logger.Println(fmt.Sprintf("Poll interval: %d * time.Second", pollInterval))
 
+	// registering metrics
+	prefix := cfg.Service.MetricsPrefix
+	if prefix == "" {
+		prefix = "metrics_server"
+	}
+	metric := metrics.NewGaugeMetric(cfg.Service.MetricsPrefix, []string{"application", "reason", "status"})
+	prometheus.MustRegister(metric.Metric)
 
-    // registering metrics
-    metric := metrics.NewGaugeMetric(cfg.Service.MetricPrefix, []string{"application", "reason", "status"})
-    prometheus.MustRegister(metric.Metric)
+	// instance git checks, if defined
+	if len(cfg.Checks.Git) != 0 {
+		for i := 0; i < len(cfg.Checks.Git); i++ {
+			gitCheck := cfg.Checks.Git[i]
+			// get the token from env if not specified in config
+			token := os.Getenv(fmt.Sprintf("%s_GIT_TOKEN", strings.ToUpper(gitCheck.Name)))
+			if token == "" {
+				token = gitCheck.Token
+			}
+			newCheck := checks.NewGitCheck(
+				cfg.Service.MetricsPrefix,
+				gitCheck.Name,
+				token,
+				gitCheck.Url,
+				gitCheck.Revision,
+				gitCheck.Path,
+				logger,
+				metric)
+			git = append(git, newCheck)
+		}
+	}
 
-    // instance git checks, if defined
-    if len(cfg.Checks.Git) != 0 {
-        for i := 0; i < len(cfg.Checks.Git); i++ {
-            gitCheck := cfg.Checks.Git[i]
-            // get the token from env if not specified in config
-            token := os.Getenv(fmt.Sprintf("%s_GIT_TOKEN", strings.ToUpper(gitCheck.Name )))
-            if token == "" {
-                token = gitCheck.Token
-            }
-            newCheck := checks.NewGitCheck(
-                cfg.Service.MetricPrefix,
-                gitCheck.Name,
-                token,
-                gitCheck.Url,
-                gitCheck.Revision,
-                gitCheck.Path,
-                logger,
-                metric)
-            git = append(git, newCheck) 
-        }
-    }
+	// instance quay checks, if defined
+	if len(cfg.Checks.Quay) != 0 {
 
-    // instance quay checks, if defined
-    if len(cfg.Checks.Quay) != 0 {
-
-        for i := 0; i < len(cfg.Checks.Quay); i++ {
-            quayCheck := cfg.Checks.Quay[i]
-            password := os.Getenv(fmt.Sprintf("%s_QUAY_PASSWORD", strings.ToUpper(quayCheck.Name )))
-            if password == "" {
-                password = quayCheck.Password
-            }
-            auth := checks.NewQuayAuth(quayCheck.Username, quayCheck.Password)
-            quay = append(quay, checks.NewQuayCheck(
-                ctx,
-                auth,
-                quayCheck.Name,
-                quayCheck.PullSpec,
-                quayCheck.Tags,
-                logger))
-        }
-    }
+		for i := 0; i < len(cfg.Checks.Quay); i++ {
+			quayCheck := cfg.Checks.Quay[i]
+			password := os.Getenv(fmt.Sprintf("%s_QUAY_PASSWORD", strings.ToUpper(quayCheck.Name)))
+			if password == "" {
+				password = quayCheck.Password
+			}
+			auth := checks.NewQuayAuth(quayCheck.Username, quayCheck.Password)
+			newCheck := checks.NewQuayCheck(
+				ctx,
+				auth,
+				quayCheck.Name,
+				quayCheck.PullSpec,
+				quayCheck.Tags,
+				logger,
+				metric)
+			quay = append(quay, newCheck)
+		}
+	}
 	go func() {
 		for {
 			// run git checks, if defined
-            if len(git) != 0 {
-                for i := 0; i < len(git); i++ {
-                    git[i].Check()
-                }
-            }
+			if len(git) != 0 {
+				for i := 0; i < len(git); i++ {
+					git[i].Check()
+				}
+			}
 			// run quay checks, if defined
-            if len(quay) != 0 {
-                for i := 0; i < len(quay); i++ {
-                    quay[i].Check()
-                }
-            }
+			if len(quay) != 0 {
+				for i := 0; i < len(quay); i++ {
+					quay[i].Check()
+				}
+			}
 			time.Sleep(time.Duration(pollInterval) * time.Second)
 		}
 	}()
@@ -118,22 +123,22 @@ func collectAndRecord(ctx context.Context, cfg *config.Config) {
 func main() {
 	var ctx context.Context
 
-    ctx = context.Background()
+	ctx = context.Background()
 
 	if reexec.Init() {
 		return
 	}
 
-    cfgFilePath := "server-config.yaml"
-    if len(os.Args) > 1 {
-        cfgFilePath = os.Args[1]
-    }
+	cfgFilePath := "server-config.yaml"
+	if len(os.Args) > 1 {
+		cfgFilePath = os.Args[1]
+	}
 
 	logger.Println(fmt.Sprintf("loading config from: %s ", cfgFilePath))
 	cfg, err := config.LoadConfig(cfgFilePath)
-    if err != nil {
-        panic(err)
-    }
+	if err != nil {
+		panic(err)
+	}
 
 	collectAndRecord(ctx, &cfg)
 	http.Handle("/metrics", promhttp.Handler())

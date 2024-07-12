@@ -16,64 +16,38 @@ limitations under the License.
 package metrics
 
 import (
-    "fmt"
-    "strings"
+	"fmt"
 	"github.com/prometheus/client_golang/prometheus"
-)
-
-var (
-	applicationAvailability = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "release_service_availability",
-			Help: "Release Service availability",
-		},
-		[]string{"application", "reason", "status"},
-	)
+	"strings"
 )
 
 type GaugeMetric struct {
-    Prefix string
-    Labels []string 
-    Metric *prometheus.GaugeVec
-
+	Prefix string
+	Labels []string
+	Metric *prometheus.GaugeVec
 }
 
-func NewGaugeMetric(prefix string, labels []string) (GaugeMetric) {
-    newGaugeMetric := GaugeMetric{
-        Prefix: prefix,
-        Labels: labels,
-    }
-
-    opts :=	prometheus.GaugeOpts{
-            Name: fmt.Sprintf("%s_check", strings.ToLower(prefix)),
-			Help: fmt.Sprintf("%s check", prefix),
+func NewGaugeMetric(prefix string, labels []string) GaugeMetric {
+	newGaugeMetric := GaugeMetric{
+		Prefix: prefix,
+		Labels: labels,
 	}
-    newGauge := prometheus.NewGaugeVec(opts, labels)
-    newGaugeMetric.Metric = newGauge
 
-    return newGaugeMetric
+	opts := prometheus.GaugeOpts{
+		Name: fmt.Sprintf("%s_check", strings.ToLower(prefix)),
+		Help: fmt.Sprintf("%s check", prefix),
+	}
+	newGauge := prometheus.NewGaugeVec(opts, labels)
+	newGaugeMetric.Metric = newGauge
+
+	return newGaugeMetric
 }
 
 func (gm *GaugeMetric) Record(metadata []string, value float64) {
-    // building labels
-    labels := map[string]string{}
-    for k, v := range gm.Labels {
-        labels[v] = metadata[k]
-    }
-    gm.Metric.With(prometheus.Labels(labels)).Set(value)
-}
-
-// RecordAvailabilityData exports the check data to be read by Prometheus
-func RecordAvailabilityData(application string, reason string, status string, value float64) {
-	applicationAvailability.
-		With(prometheus.Labels{
-			"application": application,
-			"reason":      reason,
-			"status":      status,
-		}).Set(value)
-}
-
-// init
-func init() {
-//	prometheus.MustRegister(applicationAvailability)
+	// building labels
+	labels := map[string]string{}
+	for k, v := range gm.Labels {
+		labels[v] = metadata[k]
+	}
+	gm.Metric.With(prometheus.Labels(labels)).Set(value)
 }

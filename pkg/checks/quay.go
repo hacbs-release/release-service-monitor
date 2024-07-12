@@ -34,24 +34,27 @@ import (
 
 // A QuayCheck sets the necessary parameters to run a check to quay.io.
 type QuayCheck struct {
-	name  string
-	ctx   context.Context
-	auth  QuayAuth
-	image string
-	tags  []string
-	log   *log.Logger
+	name   string
+	ctx    context.Context
+	auth   QuayAuth
+	image  string
+	tags   []string
+	log    *log.Logger
+	metric metrics.GaugeMetric
 }
 
 // MewQuayCheck creates a new QuayCheck instance.
-func NewQuayCheck(ctx context.Context, auth *QuayAuth, name string, image string, tags []string, log *log.Logger) *QuayCheck {
+func NewQuayCheck(ctx context.Context, auth *QuayAuth, name string, image string, tags []string, log *log.Logger,
+	metric metrics.GaugeMetric) *QuayCheck {
 	log.Println("creating new Quay check")
 	newCheck := &QuayCheck{
-		name:  name,
-		ctx:   ctx,
-		auth:  *auth,
-		image: image,
-		tags:  tags,
-		log:   log,
+		name:   name,
+		ctx:    ctx,
+		auth:   *auth,
+		image:  image,
+		tags:   tags,
+		log:    log,
+		metric: metric,
 	}
 
 	return newCheck
@@ -159,7 +162,7 @@ func (c *QuayCheck) Check() float64 {
 	if err != nil {
 		reason = err.Error()
 	}
-	metrics.RecordAvailabilityData(c.name, reason, pull.status, pull.code)
+	c.metric.Record([]string{c.name, reason, pull.status}, pull.code)
 
 	return pull.code
 }

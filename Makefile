@@ -1,7 +1,7 @@
 progname := metrics-server
 builder = $(shell which podman 2>/dev/null|| which docker 2>/dev/null || echo "No builder found"; exit 1)
 
-all: build
+all: fmt build
 
 .PHONY: build
 build:

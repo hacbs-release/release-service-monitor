@@ -32,8 +32,12 @@ spec:
     spec:
       containers:
       - name: release-service-availability-metrics
-        image: quay.io/lmendes/release-metrics:6959e29b4d1f56fb2d253a843c2b6f7983d037d1
+        image: quay.io/lmendes/release-metrics:cd271e31c40de22aead61c82e79ed3c5ee996934
         command: ["/bin/metrics-server", "/config/server-config.yaml"]
+        env:
+          # the HOME is mandatory to not break the quay check
+          - name: HOME
+            value: /tmp
         envFrom:
           - secretRef:
               name: release-service-availability-monitor-secret
@@ -49,7 +53,7 @@ spec:
           name: release-service-availability-monitor-config
           items:
           - key: server-config.yaml
-            value: server-config.yaml
+            path: server-config.yaml
 
 ---
 apiVersion: monitoring.coreos.com/v1

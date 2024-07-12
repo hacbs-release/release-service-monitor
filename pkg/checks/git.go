@@ -36,28 +36,28 @@ import (
 
 // defines the GitCheck type.
 type GitCheck struct {
-    prefix   string
+	prefix   string
 	name     string
 	token    string
 	url      string
 	revision string
 	path     string
 	log      *log.Logger
-    metric   metrics.GaugeMetric
+	metric   metrics.GaugeMetric
 }
 
 // NewGitCheck returns a new instance of GitCheck.
 func NewGitCheck(prefix string, name string, token string, url string, revision string, path string,
 	log *log.Logger, metric metrics.GaugeMetric) *GitCheck {
 	newCheck := &GitCheck{
-        prefix:   prefix,
+		prefix:   prefix,
 		name:     name,
 		token:    token,
 		url:      url,
 		revision: revision,
 		path:     path,
 		log:      log,
-        metric:   metric,
+		metric:   metric,
 	}
 	return newCheck
 }
@@ -144,11 +144,11 @@ func (c *GitCheck) Check() float64 {
 	if err != nil {
 		reason = err.Error()
 	}
-    c.metric.Record([]string{c.name, reason, res.status}, res.code)
+	c.metric.Record([]string{c.name, reason, res.status}, res.code)
 
 	return res.code
 }
 
-func (c *GitCheck) GetMetric() (metrics.GaugeMetric) {
-    return c.metric
+func (c *GitCheck) GetMetric() metrics.GaugeMetric {
+	return c.metric
 }
