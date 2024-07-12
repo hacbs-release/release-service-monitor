@@ -102,7 +102,7 @@ func (c *GitHttpCheck) Check() float64 {
 	if err != nil {
 		reason = err.Error()
 	}
-	c.metric.Record([]string{c.name, reason, res.status}, res.code)
+	c.metric.Record([]string{c.name, reason, res.status}, metrics.FlipValue(res.code))
 
 	return res.code
 }

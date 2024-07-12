@@ -55,7 +55,7 @@ func collectAndRecord(ctx context.Context, cfg *config.Config) {
 	if prefix == "" {
 		prefix = "metrics_server"
 	}
-	metric := metrics.NewGaugeMetric(cfg.Service.MetricsPrefix, []string{"application", "reason", "status"})
+	metric := metrics.NewGaugeMetric(cfg.Service.MetricsPrefix, []string{"check", "reason", "status"})
 	prometheus.MustRegister(metric.Metric)
 
 	// instance git checks, if defined

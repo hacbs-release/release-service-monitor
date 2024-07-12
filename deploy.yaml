@@ -32,7 +32,7 @@ spec:
     spec:
       containers:
       - name: release-service-availability-metrics
-        image: quay.io/lmendes/release-metrics:cd271e31c40de22aead61c82e79ed3c5ee996934
+        image: quay.io/lmendes/release-metrics:f1544bb605a748185a8dd49cbd52063d21a91ae5
         command: ["/bin/metrics-server", "/config/server-config.yaml"]
         env:
           # the HOME is mandatory to not break the quay check

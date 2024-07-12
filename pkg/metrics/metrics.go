@@ -51,3 +51,10 @@ func (gm *GaugeMetric) Record(metadata []string, value float64) {
 	}
 	gm.Metric.With(prometheus.Labels(labels)).Set(value)
 }
+
+// FlipValue flips 0<->1
+func FlipValue(value float64) float64 {
+	flipped := (int(value) + 1) % 2
+
+	return float64(flipped)
+}

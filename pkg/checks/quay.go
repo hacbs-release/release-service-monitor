@@ -162,7 +162,7 @@ func (c *QuayCheck) Check() float64 {
 	if err != nil {
 		reason = err.Error()
 	}
-	c.metric.Record([]string{c.name, reason, pull.status}, pull.code)
+	c.metric.Record([]string{c.name, reason, pull.status}, metrics.FlipValue(pull.code))
 
 	return pull.code
 }
