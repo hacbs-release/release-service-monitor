@@ -36,8 +36,9 @@ import (
 var (
 	pollInterval int
 
-	git  []*checks.GitCheck
-	quay []*checks.QuayCheck
+	git   []*checks.GitCheck
+	quay  []*checks.QuayCheck
+	_http []*checks.HttpCheck
 
 	logger = log.New(os.Stdout, "metrics-server: ", log.LstdFlags)
 )
@@ -82,10 +83,13 @@ func collectAndRecord(ctx context.Context, cfg *config.Config) {
 
 	// instance quay checks, if defined
 	if len(cfg.Checks.Quay) != 0 {
-
 		for i := 0; i < len(cfg.Checks.Quay); i++ {
 			quayCheck := cfg.Checks.Quay[i]
+			username := os.Getenv(fmt.Sprintf("%s_QUAY_USERNAME", strings.ToUpper(quayCheck.Name)))
 			password := os.Getenv(fmt.Sprintf("%s_QUAY_PASSWORD", strings.ToUpper(quayCheck.Name)))
+			if username == "" {
+				username = quayCheck.Username
+			}
 			if password == "" {
 				password = quayCheck.Password
 			}
@@ -101,12 +105,43 @@ func collectAndRecord(ctx context.Context, cfg *config.Config) {
 			quay = append(quay, newCheck)
 		}
 	}
+
+	// instance http checks, if defined
+	if len(cfg.Checks.Http) != 0 {
+		for i := 0; i < len(cfg.Checks.Http); i++ {
+			httpCheck := cfg.Checks.Http[i]
+			username := os.Getenv(fmt.Sprintf("%s_HTTP_USERNAME", strings.ToUpper(httpCheck.Name)))
+			password := os.Getenv(fmt.Sprintf("%s_HTTP_PASSWORD", strings.ToUpper(httpCheck.Name)))
+			if username == "" {
+				username = httpCheck.Username
+			}
+			if password == "" {
+				password = httpCheck.Password
+			}
+			newCheck := checks.NewHttpCheck(
+				httpCheck.Name,
+				username,
+				password,
+				httpCheck.Url,
+				httpCheck.Follow,
+				logger,
+				metric)
+			_http = append(_http, newCheck)
+		}
+	}
+
 	go func() {
 		for {
 			// run git checks, if defined
 			if len(git) != 0 {
 				for i := 0; i < len(git); i++ {
 					git[i].Check()
+				}
+			}
+			// run http checks, if defined
+			if len(_http) != 0 {
+				for i := 0; i < len(quay); i++ {
+					_http[i].Check()
 				}
 			}
 			// run quay checks, if defined

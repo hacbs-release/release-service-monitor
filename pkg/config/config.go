@@ -23,6 +23,15 @@ type QuayCheckConfig struct {
 	Password string   `yaml:"password"`
 }
 
+// GitCheck is a structure type to store config for a Git check
+type HttpCheckConfig struct {
+	Name     string `yaml:"name"`
+	Url      string `yaml:"url"`
+	Username string `yaml:"username"`
+	Password string `yaml:"password"`
+	Follow   bool   `yaml:"follow_redirect"`
+}
+
 // ServiceConfig is a structure type to store the configs for the service
 type ServiceConfig struct {
 	// service:map[listen_port:8080 pool_interval:60]
@@ -35,6 +44,7 @@ type ServiceConfig struct {
 type CheckConfig struct {
 	Git  []GitCheckConfig  `yaml:"git"`
 	Quay []QuayCheckConfig `yaml:"quay"`
+	Http []HttpCheckConfig `yaml:"http"`
 }
 
 type Config struct {
