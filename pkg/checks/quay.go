@@ -149,7 +149,7 @@ func (c *QuayCheck) pullImage() (CheckResult, error) {
 		}
 	}
 
-	c.log.Println(fmt.Sprintf("check succeeded"))
+	c.log.Println(c.name, "check succeeded")
 	return CheckResult{0, "Succeeded", ""}, nil
 }
 
@@ -157,7 +157,7 @@ func (c *QuayCheck) pullImage() (CheckResult, error) {
 func (c *QuayCheck) Check() float64 {
 	var reason string
 
-	c.log.Println("running quay check")
+	c.log.Println("running quay check:", c.name)
 	pull, err := c.pullImage()
 	if err != nil {
 		reason = err.Error()

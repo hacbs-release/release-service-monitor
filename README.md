@@ -1,8 +1,9 @@
 # Welcome to Release Service availability monitor
 This service generates availability metrics for the Release Service
 
-## Configuration example
-### service-config.yaml
+## Configuration
+
+#### service-config.yaml
 ```
 ---
 service:
@@ -21,6 +22,10 @@ checks:
       revision: my-gitlab-branch
       path: path-to-my-file-on-gitlab
       token: my-token
+  http:
+    - name: httpcheck
+      url: https://www.google.com/robots.txt
+      insecure: true
   quay:
     - name: quay-io
       tags:
@@ -30,18 +35,67 @@ checks:
       password: my-quay-password
 ```
 
-To run it
+#### running it
 ```
 ./metrics-server service-config.yaml
 ```
-## Handling passwords
 
-Although it is possible to set the tokens and passwords in the main configuration file, it is also possible
+## Config parameters
+
+
+### Service
+| parameter        | default |
+| :--              |  :--:   |
+| *listen_port*    | 8080    |
+| *pool_interval*  | 60      |
+| *metrics_previx* | metrics_server |
+
+### Checks
+#### GIT
+| git | description | example |
+| :-- |  --  | -- |
+| *name* | check name | mycheck |
+| *url* | git repo url | https://github.com/myrepo.git |
+| *revision* | git revision | mybranch |
+| *path* | file path on git | myfile.txt |
+| *token* | git token| mytoken |
+
+#### HTTP
+| git | description | example |
+| :-- |  --  | -- |
+| *name* | check name | mycheck |
+| url | url to check | https://www.google.com/robots.txt |
+| username | username for `Basic` auth | myuser |
+| password | password for `Basic` auth | mypass |
+| cert | base64 data TLS cert | - |
+| key | base64 data TLS key | - |
+| insecure | ignore tls errors | false |
+| follow | follow redirects | true |
+
+#### QUAY
+| git | description | example |
+| :-- |  --  | -- |
+| *name* | check name | mycheck |
+| *pullspec* | quay.io pullspec | https://quay.io/user/image:tag |
+| *username* | quay username  | myuser |
+| *password* | quay password | mypass |
+
+## Handling sensitive data
+
+Although it is possible to set the tokens, certs and passwords in the main configuration file, it is recommended
 to use special variables to better secure the credentials.
 
-The environment variable format is `<CHECK NAME>_GIT_TOKEN` for `git` and `<CHECK_NAME>_QUAY_PASSWORD` for
-`quay` checks.
+The environment variable naming convention searched by the application is: `<CHECK_NAME>_<SPECIAL_VARIABLE_NAME>`
 
 Example:
 
-A *git* check named `github` can have its token set through the `GITHUB_GIT_TOKEN` env variable.
+For a *git* check named as `mycheck`, the token variable should be exported as `MYCHECK_GIT_TOKEN`.
+
+### Available sensitive env variables
+
+| git        | http           | quay          |
+| :-:        | :-:            | :-:           |
+| GIT_TOKEN  | HTTP_USERNAME  | QUAY_USERNAME |
+|      -     | HTTP_PASSWORD | QUAY_PASSWORD |
+|      -     | HTTP_CERT ||
+|      -     | HTTP_KEY ||
