@@ -29,6 +29,9 @@ type HttpCheckConfig struct {
 	Url      string `yaml:"url"`
 	Username string `yaml:"username"`
 	Password string `yaml:"password"`
+	Cert     string `yaml:"cert"`
+	Key      string `yaml:"key"`
+	Insecure bool   `yaml:"insecure"`
 	Follow   bool   `yaml:"follow_redirect"`
 }
 

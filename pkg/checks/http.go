@@ -32,6 +32,9 @@ type HttpCheck struct {
 	username string
 	password string
 	url      string
+	cert     string
+	key      string
+	insecure bool
 	follow   bool
 	scheme   string
 	host     string
@@ -41,13 +44,16 @@ type HttpCheck struct {
 }
 
 // NewHttpCheck returns a new instance of HttpCheck.
-func NewHttpCheck(name, username, password, url string, follow bool, log *log.Logger,
+func NewHttpCheck(name, username, password, url, cert, key string, insecure, follow bool, log *log.Logger,
 	metric metrics.GaugeMetric) *HttpCheck {
 	newCheck := &HttpCheck{
 		name:     name,
 		username: username,
 		password: password,
 		url:      url,
+		cert:     cert,
+		key:      key,
+		insecure: insecure,
 		follow:   follow,
 		log:      log,
 		metric:   metric,
@@ -71,8 +77,12 @@ func (c *HttpCheck) parseUrl() {
 // fetchRemoteFile connects to a remote git url and return a instance of CheckResult and nil in case of success or a
 // instance of CheckResult and error in case of failure.
 func (c *HttpCheck) checkUrl() (CheckResult, error) {
+	clientTLSCert, err := tls.X509KeyPair([]byte(c.cert), []byte(c.key))
 	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: c.insecure,
+			Certificates:       []tls.Certificate{clientTLSCert},
+		},
 	}
 
 	client := &http.Client{
@@ -115,7 +125,7 @@ func (c *HttpCheck) checkUrl() (CheckResult, error) {
 func (c *HttpCheck) Check() float64 {
 	var reason string
 
-	c.log.Println("running git check to ")
+	c.log.Println("running HTTP check:", c.name)
 	res, err := c.checkUrl()
 	if err != nil {
 		reason = err.Error()

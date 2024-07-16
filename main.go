@@ -56,7 +56,7 @@ func collectAndRecord(ctx context.Context, cfg *config.Config) {
 	if prefix == "" {
 		prefix = "metrics_server"
 	}
-	metric := metrics.NewGaugeMetric(cfg.Service.MetricsPrefix, []string{"check", "reason", "status"})
+	metric := metrics.NewGaugeMetric(prefix, []string{"check", "reason", "status"})
 	prometheus.MustRegister(metric.Metric)
 
 	// instance git checks, if defined
@@ -112,17 +112,28 @@ func collectAndRecord(ctx context.Context, cfg *config.Config) {
 			httpCheck := cfg.Checks.Http[i]
 			username := os.Getenv(fmt.Sprintf("%s_HTTP_USERNAME", strings.ToUpper(httpCheck.Name)))
 			password := os.Getenv(fmt.Sprintf("%s_HTTP_PASSWORD", strings.ToUpper(httpCheck.Name)))
+			cert := os.Getenv(fmt.Sprintf("%s_HTTP_CERT", strings.ToUpper(httpCheck.Name)))
+			key := os.Getenv(fmt.Sprintf("%s_HTTP_KEY", strings.ToUpper(httpCheck.Name)))
 			if username == "" {
 				username = httpCheck.Username
 			}
 			if password == "" {
 				password = httpCheck.Password
 			}
+			if cert == "" {
+				cert = httpCheck.Cert
+			}
+			if key == "" {
+				key = httpCheck.Key
+			}
 			newCheck := checks.NewHttpCheck(
 				httpCheck.Name,
 				username,
 				password,
 				httpCheck.Url,
+				cert,
+				key,
+				httpCheck.Insecure,
 				httpCheck.Follow,
 				logger,
 				metric)
@@ -140,7 +151,7 @@ func collectAndRecord(ctx context.Context, cfg *config.Config) {
 			}
 			// run http checks, if defined
 			if len(_http) != 0 {
-				for i := 0; i < len(quay); i++ {
+				for i := 0; i < len(_http); i++ {
 					_http[i].Check()
 				}
 			}

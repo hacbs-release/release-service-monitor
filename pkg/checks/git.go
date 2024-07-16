@@ -140,6 +140,7 @@ func (c *GitCheck) statFile() (CheckResult, error) {
 func (c *GitCheck) Check() float64 {
 	var reason string
 
+	c.log.Println("running git check:", c.name)
 	res, err := c.statFile()
 	if err != nil {
 		reason = err.Error()
