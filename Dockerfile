@@ -1,6 +1,6 @@
 # Build the manager binary
 #FROM registry.access.redhat.com/ubi9/go-toolset:1.20 as builder
-FROM fedora:38 as builder
+FROM fedora:41 as builder
 
 RUN yum -y install \
  golang \
