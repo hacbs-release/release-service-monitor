@@ -93,7 +93,7 @@ func collectAndRecord(ctx context.Context, cfg *config.Config) {
 			if password == "" {
 				password = quayCheck.Password
 			}
-			auth := checks.NewQuayAuth(quayCheck.Username, quayCheck.Password)
+			auth := checks.NewQuayAuth(username, password)
 			newCheck := checks.NewQuayCheck(
 				ctx,
 				auth,
