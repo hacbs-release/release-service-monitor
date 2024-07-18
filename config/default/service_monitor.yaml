@@ -1,0 +1,16 @@
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: release-service-monitor
+  labels:
+    app: release-service-monitor-app
+  namespace: release-service
+spec:
+  endpoints:
+    - path: /metrics
+      port: metricshttp
+      scheme: http
+  selector:
+    matchLabels:
+      app: release-service-monitor-app
