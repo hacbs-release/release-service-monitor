@@ -14,7 +14,7 @@ metadata:
     appstudio.openshift.io/component: release-service-monitor
     pipelines.appstudio.openshift.io/type: build
   name: release-service-monitor-on-push
-  namespace: lmendes-tenant
+  namespace: rhtap-release-2-tenant
 spec:
   params:
   - name: git-url
@@ -22,7 +22,7 @@ spec:
   - name: revision
     value: '{{revision}}'
   - name: output-image
-    value: quay.io/redhat-user-workloads/lmendes-tenant/release-service-monitor/release-service-monitor:{{revision}}
+    value: quay.io/redhat-user-workloads/rhtap-release-2-tenant/release-service-monitor/release-service-monitor:{{revision}}
   - name: dockerfile
     value: Dockerfile
   pipelineSpec:
