@@ -1,0 +1,17 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: release-service-monitor-app
+  name: release-service-monitor-service
+  namespace: release-service
+spec:
+  type: ClusterIP
+  ports:
+  - name: metricshttp
+    port: 8080
+    protocol: TCP
+    targetPort: 8080
+  selector:
+    app: release-service-monitor-app

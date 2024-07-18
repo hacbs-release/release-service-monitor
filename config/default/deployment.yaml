@@ -1,0 +1,40 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: release-service-monitor-deployment
+  namespace: release-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: release-service-monitor-app
+  template:
+    metadata:
+      labels:
+        app: release-service-monitor-app
+    spec:
+      containers:
+      - name: release-service-monitor
+        image: quay.io/konflux-ci/release-service-monitor:dbb20f80954f2657c455779b0033ee0cd1494d79
+        command: ["/bin/metrics-server", "/config/server-config.yaml"]
+        env:
+          # the HOME is mandatory to not break the quay check
+          - name: HOME
+            value: /tmp
+        envFrom:
+          - secretRef:
+              name: release-service-monitor-secret
+        ports:
+        - containerPort: 8080
+        volumeMounts:
+          - name: config
+            mountPath: "/config"
+            readOnly: true
+      volumes:
+      - name: config
+        configMap:
+          name: release-service-monitor-config
+          items:
+          - key: server-config.yaml
+            path: server-config.yaml
