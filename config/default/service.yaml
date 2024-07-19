@@ -9,9 +9,9 @@ metadata:
 spec:
   type: ClusterIP
   ports:
-  - name: metricshttp
-    port: 8080
-    protocol: TCP
-    targetPort: 8080
+    - name: metricshttp
+      port: 8080
+      protocol: TCP
+      targetPort: 8080
   selector:
     app: release-service-monitor-app
