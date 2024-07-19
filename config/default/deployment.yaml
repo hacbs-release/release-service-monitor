@@ -15,26 +15,42 @@ spec:
         app: release-service-monitor-app
     spec:
       containers:
-      - name: release-service-monitor
-        image: quay.io/konflux-ci/release-service-monitor:dbb20f80954f2657c455779b0033ee0cd1494d79
-        command: ["/bin/metrics-server", "/config/server-config.yaml"]
-        env:
-          # the HOME is mandatory to not break the quay check
-          - name: HOME
-            value: /tmp
-        envFrom:
-          - secretRef:
-              name: release-service-monitor-secret
-        ports:
-        - containerPort: 8080
-        volumeMounts:
-          - name: config
-            mountPath: "/config"
-            readOnly: true
+        - name: release-service-monitor
+          image: >-
+            quay.io/konflux-ci/release-service-monitor:dbb20f80954f2657c455779b0033ee0cd1494d79
+          command: ["/bin/metrics-server", "/config/server-config.yaml"]
+          env:
+            # the HOME is mandatory to not break the quay check
+            - name: HOME
+              value: /tmp
+          envFrom:
+            - secretRef:
+                name: release-service-monitor-secret
+          ports:
+            - containerPort: 8080
+          volumeMounts:
+            - name: config
+              mountPath: "/config"
+              readOnly: true
+            - mountPath: /tmp
+              name: temp-directory
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+          resources:
+            limits:
+              cpu: 500m
+              memory: 128Mi
+            requests:
+              cpu: 10m
+              memory: 64Mi
       volumes:
-      - name: config
-        configMap:
-          name: release-service-monitor-config
-          items:
-          - key: server-config.yaml
-            path: server-config.yaml
+        - name: config
+          configMap:
+            name: release-service-monitor-config
+            items:
+              - key: server-config.yaml
+                path: server-config.yaml
+        - name: temp-directory
+          emptyDir: {}
