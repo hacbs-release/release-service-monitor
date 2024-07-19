@@ -22,7 +22,7 @@ spec:
           env:
             # the HOME is mandatory to not break the quay check
             - name: HOME
-              value: /tmp
+              value: /var/tmp
           envFrom:
             - secretRef:
                 name: release-service-monitor-secret
@@ -32,7 +32,7 @@ spec:
             - name: config
               mountPath: "/config"
               readOnly: true
-            - mountPath: /tmp
+            - mountPath: /var/tmp
               name: temp-directory
           securityContext:
             allowPrivilegeEscalation: false
