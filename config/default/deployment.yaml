@@ -20,8 +20,10 @@ spec:
             quay.io/konflux-ci/release-service-monitor:dbb20f80954f2657c455779b0033ee0cd1494d79
           command: ["/bin/metrics-server", "/config/server-config.yaml"]
           env:
-            # the HOME is mandatory to not break the quay check
+            # required as the temporary directories are read-only
             - name: HOME
+              value: /var/tmp
+            - name: TMPDIR
               value: /var/tmp
           envFrom:
             - secretRef:
