@@ -81,7 +81,8 @@ func (c *QuayCheck) pullImage() (CheckResult, error) {
 		return CheckResult{1, "Failed", err.Error()}, err
 	}
 
-	tmpdir, err = os.MkdirTemp("/var/tmp", "quaycheck-")
+	// the os.TempDir() value can be overwritten with the TMPDIR var
+	tmpdir, err = os.MkdirTemp(os.TempDir(), "quaycheck-")
 	c.log.Println(fmt.Sprintf("temporary directory is %s", tmpdir))
 	if err != nil {
 		c.log.Println(fmt.Sprintf("check failed: %s", err.Error()))
