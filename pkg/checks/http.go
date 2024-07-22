@@ -40,12 +40,12 @@ type HttpCheck struct {
 	host     string
 	path     string
 	log      *log.Logger
-	metric   metrics.GaugeMetric
+	metric   metrics.CompositeMetric
 }
 
 // NewHttpCheck returns a new instance of HttpCheck.
 func NewHttpCheck(name, username, password, url, cert, key string, insecure, follow bool, log *log.Logger,
-	metric metrics.GaugeMetric) *HttpCheck {
+	metric metrics.CompositeMetric) *HttpCheck {
 	newCheck := &HttpCheck{
 		name:     name,
 		username: username,
@@ -130,7 +130,8 @@ func (c *HttpCheck) Check() float64 {
 	if err != nil {
 		reason = err.Error()
 	}
-	c.metric.Record([]string{c.name, reason, res.status}, metrics.FlipValue(res.code))
+	c.metric.Gauge.Record([]string{c.name}, metrics.FlipValue(res.code))
+	c.metric.Histogram.Record([]string{c.name, reason, res.status}, 1)
 
 	return res.code
 }

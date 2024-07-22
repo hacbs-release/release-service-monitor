@@ -36,12 +36,12 @@ type GitHttpCheck struct {
 	revision       string
 	path           string
 	log            *log.Logger
-	metric         metrics.GaugeMetric
+	metric         metrics.CompositeMetric
 }
 
 // NewGitHttpCheck returns a new instance of GitHttpCheck.
 func NewGitHttpCheck(name string, repositoryType int, projectId string, token string, url string, revision string,
-	path string, log *log.Logger, metric metrics.GaugeMetric) *GitHttpCheck {
+	path string, log *log.Logger, metric metrics.CompositeMetric) *GitHttpCheck {
 	newCheck := &GitHttpCheck{
 		name:           name,
 		repositoryType: repositoryType,
@@ -102,7 +102,8 @@ func (c *GitHttpCheck) Check() float64 {
 	if err != nil {
 		reason = err.Error()
 	}
-	c.metric.Record([]string{c.name, reason, res.status}, metrics.FlipValue(res.code))
+	c.metric.Gauge.Record([]string{c.name}, metrics.FlipValue(res.code))
+	c.metric.Histogram.Record([]string{c.name, reason, res.status}, 1)
 
 	return res.code
 }
