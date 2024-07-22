@@ -56,8 +56,17 @@ func collectAndRecord(ctx context.Context, cfg *config.Config) {
 	if prefix == "" {
 		prefix = "metrics_server"
 	}
-	metric := metrics.NewGaugeMetric(prefix, []string{"check", "reason", "status"})
-	prometheus.MustRegister(metric.Metric)
+
+	gaugeMetric := metrics.NewGaugeMetric(prefix, []string{"check"})
+	histogramMetric := metrics.NewHistogramMetric(prefix, []string{"check", "reason", "status"})
+
+	prometheus.MustRegister(gaugeMetric.Metric)
+	prometheus.MustRegister(histogramMetric.Metric)
+
+	metric := metrics.CompositeMetric{
+		Gauge:     gaugeMetric,
+		Histogram: histogramMetric,
+	}
 
 	// instance git checks, if defined
 	if len(cfg.Checks.Git) != 0 {

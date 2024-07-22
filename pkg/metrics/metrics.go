@@ -21,12 +21,27 @@ import (
 	"strings"
 )
 
+// CompositeMetric holds instances of GaugeMetric and HistogramMetric
+type CompositeMetric struct {
+	Gauge     GaugeMetric
+	Histogram HistogramMetric
+}
+
+// GaugeMetric
 type GaugeMetric struct {
 	Prefix string
 	Labels []string
 	Metric *prometheus.GaugeVec
 }
 
+// HistogramMetric
+type HistogramMetric struct {
+	Prefix string
+	Labels []string
+	Metric *prometheus.HistogramVec
+}
+
+// NewGaugeMetric creates a new instance of GaugeMetric
 func NewGaugeMetric(prefix string, labels []string) GaugeMetric {
 	newGaugeMetric := GaugeMetric{
 		Prefix: prefix,
@@ -34,8 +49,8 @@ func NewGaugeMetric(prefix string, labels []string) GaugeMetric {
 	}
 
 	opts := prometheus.GaugeOpts{
-		Name: fmt.Sprintf("%s_check", strings.ToLower(prefix)),
-		Help: fmt.Sprintf("%s check", prefix),
+		Name: fmt.Sprintf("%s_check_gauge", strings.ToLower(prefix)),
+		Help: fmt.Sprintf("%s check_gauge", prefix),
 	}
 	newGauge := prometheus.NewGaugeVec(opts, labels)
 	newGaugeMetric.Metric = newGauge
@@ -43,6 +58,23 @@ func NewGaugeMetric(prefix string, labels []string) GaugeMetric {
 	return newGaugeMetric
 }
 
+// NewHistogramMetric create a new instance of HistogramMetric
+func NewHistogramMetric(prefix string, labels []string) HistogramMetric {
+	newHistogramMetric := HistogramMetric{
+		Prefix: prefix,
+		Labels: labels,
+	}
+	opts := prometheus.HistogramOpts{
+		Name: fmt.Sprintf("%s_check_histogram", strings.ToLower(prefix)),
+		Help: fmt.Sprintf("%s check_histogram", prefix),
+	}
+	newHistogram := prometheus.NewHistogramVec(opts, labels)
+	newHistogramMetric.Metric = newHistogram
+
+	return newHistogramMetric
+}
+
+// Record records a new value for a GaugeMetric
 func (gm *GaugeMetric) Record(metadata []string, value float64) {
 	// building labels
 	labels := map[string]string{}
@@ -50,6 +82,16 @@ func (gm *GaugeMetric) Record(metadata []string, value float64) {
 		labels[v] = metadata[k]
 	}
 	gm.Metric.With(prometheus.Labels(labels)).Set(value)
+}
+
+// Record records a new value for a HistogramMetric
+func (hm *HistogramMetric) Record(metadata []string, value float64) {
+	// building labels
+	labels := map[string]string{}
+	for k, v := range hm.Labels {
+		labels[v] = metadata[k]
+	}
+	hm.Metric.With(prometheus.Labels(labels)).Observe(value)
 }
 
 // FlipValue flips 0<->1

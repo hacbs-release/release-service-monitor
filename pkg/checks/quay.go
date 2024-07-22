@@ -40,12 +40,12 @@ type QuayCheck struct {
 	image  string
 	tags   []string
 	log    *log.Logger
-	metric metrics.GaugeMetric
+	metric metrics.CompositeMetric
 }
 
 // MewQuayCheck creates a new QuayCheck instance.
 func NewQuayCheck(ctx context.Context, auth *QuayAuth, name string, image string, tags []string, log *log.Logger,
-	metric metrics.GaugeMetric) *QuayCheck {
+	metric metrics.CompositeMetric) *QuayCheck {
 	log.Println("creating new Quay check")
 	newCheck := &QuayCheck{
 		name:   name,
@@ -163,7 +163,8 @@ func (c *QuayCheck) Check() float64 {
 	if err != nil {
 		reason = err.Error()
 	}
-	c.metric.Record([]string{c.name, reason, pull.status}, metrics.FlipValue(pull.code))
+	c.metric.Gauge.Record([]string{c.name}, metrics.FlipValue(pull.code))
+	c.metric.Histogram.Record([]string{c.name, reason, pull.status}, 1)
 
 	return pull.code
 }
