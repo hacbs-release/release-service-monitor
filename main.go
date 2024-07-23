@@ -21,6 +21,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 
@@ -93,6 +94,12 @@ func collectAndRecord(ctx context.Context, cfg *config.Config) {
 	// instance quay checks, if defined
 	if len(cfg.Checks.Quay) != 0 {
 		for i := 0; i < len(cfg.Checks.Quay); i++ {
+			// the os.TempDir() value can be overwritten with the TMPDIR var
+			tmpdir, err := os.MkdirTemp(os.TempDir(), "quaycheck-")
+			if err != nil {
+				panic(err.Error())
+			}
+			logger.Println(fmt.Sprintf("quay temporary directory is %s", tmpdir))
 			quayCheck := cfg.Checks.Quay[i]
 			username := os.Getenv(fmt.Sprintf("%s_QUAY_USERNAME", strings.ToUpper(quayCheck.Name)))
 			password := os.Getenv(fmt.Sprintf("%s_QUAY_PASSWORD", strings.ToUpper(quayCheck.Name)))
@@ -108,6 +115,7 @@ func collectAndRecord(ctx context.Context, cfg *config.Config) {
 				auth,
 				quayCheck.Name,
 				quayCheck.PullSpec,
+				tmpdir,
 				quayCheck.Tags,
 				logger,
 				metric)
@@ -170,6 +178,7 @@ func collectAndRecord(ctx context.Context, cfg *config.Config) {
 					quay[i].Check()
 				}
 			}
+			runtime.GC()
 			time.Sleep(time.Duration(pollInterval) * time.Second)
 		}
 	}()
