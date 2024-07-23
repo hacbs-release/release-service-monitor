@@ -34,24 +34,26 @@ import (
 
 // A QuayCheck sets the necessary parameters to run a check to quay.io.
 type QuayCheck struct {
-	name   string
 	ctx    context.Context
 	auth   QuayAuth
+	name   string
 	image  string
+	tmpdir string
 	tags   []string
 	log    *log.Logger
 	metric metrics.CompositeMetric
 }
 
 // MewQuayCheck creates a new QuayCheck instance.
-func NewQuayCheck(ctx context.Context, auth *QuayAuth, name string, image string, tags []string, log *log.Logger,
+func NewQuayCheck(ctx context.Context, auth *QuayAuth, name, image, tmpdir string, tags []string, log *log.Logger,
 	metric metrics.CompositeMetric) *QuayCheck {
 	log.Println("creating new Quay check")
 	newCheck := &QuayCheck{
-		name:   name,
 		ctx:    ctx,
 		auth:   *auth,
+		name:   name,
 		image:  image,
+		tmpdir: tmpdir,
 		tags:   tags,
 		log:    log,
 		metric: metric,
@@ -69,7 +71,6 @@ func (c *QuayCheck) pullImage() (CheckResult, error) {
 		runtime        *libimage.Runtime
 		store          storage.Store
 		storeOptions   types.StoreOptions
-		tmpdir         string
 		err            error
 	)
 
@@ -81,15 +82,7 @@ func (c *QuayCheck) pullImage() (CheckResult, error) {
 		return CheckResult{1, "Failed", err.Error()}, err
 	}
 
-	// the os.TempDir() value can be overwritten with the TMPDIR var
-	tmpdir, err = os.MkdirTemp(os.TempDir(), "quaycheck-")
-	c.log.Println(fmt.Sprintf("temporary directory is %s", tmpdir))
-	if err != nil {
-		c.log.Println(fmt.Sprintf("check failed: %s", err.Error()))
-		return CheckResult{1, "Failed", err.Error()}, err
-	}
-
-	storageDir := fmt.Sprintf("%s/%d/", tmpdir, os.Getuid())
+	storageDir := fmt.Sprintf("%s/%d/", c.tmpdir, os.Getuid())
 	storeOptions.RunRoot = storageDir
 	storeOptions.GraphRoot = storageDir
 	storeOptions.RootlessStoragePath = storageDir
@@ -167,6 +160,11 @@ func (c *QuayCheck) Check() float64 {
 	c.metric.Histogram.Record([]string{c.name, reason, pull.status}, 1)
 
 	return pull.code
+}
+
+// cleans up the tmep dir
+func (c *QuayCheck) cleanUp() error {
+	return os.RemoveAll(c.tmpdir)
 }
 
 // getImage returns the image parameter of a QuayCheck instance.
