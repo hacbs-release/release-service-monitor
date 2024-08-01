@@ -25,9 +25,6 @@ spec:
               value: /var/tmp
             - name: TMPDIR
               value: /var/tmp
-          envFrom:
-            - secretRef:
-                name: release-service-monitor-secret
           ports:
             - containerPort: 8080
           volumeMounts:
