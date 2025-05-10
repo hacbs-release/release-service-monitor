@@ -456,7 +456,8 @@ spec:
       optional: true
     - name: netrc
       optional: true
-  taskRunTemplate: {}
+  taskRunTemplate:
+    serviceAccountName: build-pipeline-release-service-monitor
   workspaces:
   - name: workspace
     volumeClaimTemplate:
