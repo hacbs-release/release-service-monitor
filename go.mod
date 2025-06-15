@@ -101,7 +101,7 @@ require (
 	github.com/prometheus/procfs v0.12.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/secure-systems-lab/go-securesystemslib v0.8.0 // indirect
-	github.com/sergi/go-diff v1.3.2-0.20230802210424-5b0b94c5c0d3 // indirect
+	github.com/sergi/go-diff v1.4.0 // indirect
 	github.com/sigstore/fulcio v1.4.5 // indirect
 	github.com/sigstore/rekor v1.3.6 // indirect
 	github.com/sigstore/sigstore v1.8.3 // indirect
