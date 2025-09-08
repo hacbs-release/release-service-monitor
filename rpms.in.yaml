@@ -1,0 +1,4 @@
+packages: [golang, gpgme-devel]
+contentOrigin:
+  repofiles: ["./ubi.repo"]
+arches: [x86_64]

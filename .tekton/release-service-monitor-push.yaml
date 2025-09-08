@@ -24,6 +24,10 @@ spec:
     value: quay.io/redhat-user-workloads/rhtap-release-2-tenant/release-service-monitor/release-service-monitor:{{revision}}
   - name: dockerfile
     value: Dockerfile
+  - name: hermetic
+    value: "true" 
+  - name: prefetch-input
+    value: '[{"type": "gomod", "path": "."},{"type": "rpm", "path": "."}]'
   pipelineSpec:
     finally:
     - name: show-sbom
