@@ -17,128 +17,197 @@ package checks
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	"io"
 	"log"
-	"os"
+	"net/http"
 	"regexp"
-
-	"github.com/containers/common/libimage"
-	"github.com/containers/common/pkg/config"
-	"github.com/containers/storage"
-	"github.com/containers/storage/pkg/idtools"
-	"github.com/containers/storage/types"
+	"strings"
+	"time"
 
 	"github.com/hacbs-release/release-availability-metrics/pkg/metrics"
 )
 
-// A QuayCheck sets the necessary parameters to run a check to quay.io.
+// QuayCheck sets the necessary parameters to run a check to a container registry.
 type QuayCheck struct {
-	ctx    context.Context
 	auth   QuayAuth
 	name   string
 	image  string
-	tmpdir string
 	tags   []string
 	log    *log.Logger
 	metric metrics.CompositeMetric
+	client *http.Client
 }
 
-// MewQuayCheck creates a new QuayCheck instance.
-func NewQuayCheck(ctx context.Context, auth *QuayAuth, name, image, tmpdir string, tags []string, log *log.Logger,
-	metric metrics.CompositeMetric) *QuayCheck {
+// NewQuayCheck creates a new QuayCheck instance.
+func NewQuayCheck(
+	auth *QuayAuth,
+	name, image string,
+	tags []string,
+	log *log.Logger,
+	metric metrics.CompositeMetric,
+) *QuayCheck {
 	log.Println("creating new Quay check")
-	newCheck := &QuayCheck{
-		ctx:    ctx,
+	return &QuayCheck{
 		auth:   *auth,
 		name:   name,
 		image:  image,
-		tmpdir: tmpdir,
 		tags:   tags,
 		log:    log,
 		metric: metric,
+		client: &http.Client{
+			Timeout: 30 * time.Second,
+		},
 	}
-
-	return newCheck
 }
 
-// pullImage pulls a image from quay and returns CheckResult and nil in case of success or CheckResult and error
-// in case of failure.
-func (c *QuayCheck) pullImage() (CheckResult, error) {
+// parseImageRef parses an image reference into registry and repository.
+// Example: quay.io/konflux-ci/release-service-utils -> registry=quay.io, repo=konflux-ci/release-service-utils
+func (c *QuayCheck) parseImageRef() (registry, repo string) {
+	parts := strings.SplitN(c.image, "/", 2)
+	if len(parts) == 2 && (strings.Contains(parts[0], ".") || strings.Contains(parts[0], ":")) {
+		registry = parts[0]
+		repo = parts[1]
+	} else {
+		// Default to docker.io for images without explicit registry
+		registry = "docker.io"
+		repo = c.image
+	}
+	return registry, repo
+}
 
-	var (
-		runtimeOptions libimage.RuntimeOptions
-		runtime        *libimage.Runtime
-		store          storage.Store
-		storeOptions   types.StoreOptions
-		err            error
-	)
+var (
+	realmRe   = regexp.MustCompile(`realm="([^"]+)"`)
+	serviceRe = regexp.MustCompile(`service="([^"]+)"`)
+)
 
-	c.log.Println(fmt.Sprintf("fetching image %s as %s", c.getImage(), c.auth.getUsername()))
+// getAuthToken retrieves a bearer token for the registry using the WWW-Authenticate challenge.
+func (c *QuayCheck) getAuthToken(ctx context.Context, registry, repo, wwwAuth string) (string, error) {
+	// Parse WWW-Authenticate header
+	// Example: Bearer realm="https://quay.io/v2/auth",service="quay.io",scope="repository:user/repo:pull"
+	realmMatch := realmRe.FindStringSubmatch(wwwAuth)
+	serviceMatch := serviceRe.FindStringSubmatch(wwwAuth)
 
-	storeOptions, err = types.DefaultStoreOptions()
-	if err != nil {
-		c.log.Println(fmt.Sprintf("check failed: %s", err.Error()))
-		return CheckResult{1, "Failed", err.Error()}, err
+	if len(realmMatch) < 2 {
+		return "", fmt.Errorf("failed to parse auth realm from: %s", wwwAuth)
 	}
 
-	storageDir := fmt.Sprintf("%s/%d/", c.tmpdir, os.Getuid())
-	storeOptions.RunRoot = storageDir
-	storeOptions.GraphRoot = storageDir
-	storeOptions.RootlessStoragePath = storageDir
-	storeOptions.GraphDriverName = "vfs"
-	storeOptions.GraphDriverOptions = []string{"vfs.ignore_chown_errors=1"}
-	storeOptions.RootAutoNsUser = string(os.Getuid())
-
-	storeOptions.UIDMap = []idtools.IDMap{{
-		ContainerID: 0,
-		HostID:      os.Getuid(),
-		Size:        1,
-	}}
-
-	storeOptions.GIDMap = []idtools.IDMap{{
-		ContainerID: 0,
-		HostID:      os.Getgid(),
-		Size:        1,
-	}}
-
-	store, err = storage.GetStore(storeOptions)
-	if err != nil {
-		c.log.Println(fmt.Sprintf("check failed: %s", err.Error()))
-		return CheckResult{1, "Failed", err.Error()}, err
+	realm := realmMatch[1]
+	service := ""
+	if len(serviceMatch) >= 2 {
+		service = serviceMatch[1]
 	}
 
-	runtime, err = libimage.RuntimeFromStore(store, &runtimeOptions)
+	// Build token request URL
+	tokenURL := fmt.Sprintf("%s?service=%s&scope=repository:%s:pull", realm, service, repo)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", tokenURL, nil)
 	if err != nil {
-		c.log.Println(fmt.Sprintf("check failed: %s", err.Error()))
-		return CheckResult{1, "Failed", err.Error()}, err
+		return "", err
 	}
 
-	options := &libimage.PullOptions{}
-	options.Username = c.auth.getUsername()
-	options.Password = c.auth.getPassword()
-	options.Writer = io.Discard
+	// Add basic auth if credentials provided
+	if c.auth.getUsername() != "" && c.auth.getPassword() != "" {
+		req.SetBasicAuth(c.auth.getUsername(), c.auth.getPassword())
+	}
 
-	pullImage := ""
-	for i := 0; i < len(c.tags); i++ {
-		// pull the image with tag unless no tag is set
-		pullImage = fmt.Sprintf("%s:%s", c.getImage(), c.tags[i])
-		if c.tags[i] == "" {
-			pullImage = fmt.Sprintf("%s", c.getImage())
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode == http.StatusUnauthorized {
+			return "", fmt.Errorf("authentication failed (status %d) - check credentials", resp.StatusCode)
+		}
+		return "", fmt.Errorf("token request failed with status: %d", resp.StatusCode)
+	}
+
+	var tokenResp struct {
+		Token       string `json:"token"`
+		AccessToken string `json:"access_token"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
+		return "", err
+	}
+
+	if tokenResp.Token != "" {
+		return tokenResp.Token, nil
+	}
+	return tokenResp.AccessToken, nil
+}
+
+// checkManifest checks if a manifest exists for the given image and tag using the registry API.
+func (c *QuayCheck) checkManifest(ctx context.Context, tag string) error {
+	registry, repo := c.parseImageRef()
+	manifestURL := fmt.Sprintf("https://%s/v2/%s/manifests/%s", registry, repo, tag)
+
+	acceptHeader := strings.Join([]string{
+		"application/vnd.docker.distribution.manifest.v2+json",
+		"application/vnd.docker.distribution.manifest.list.v2+json",
+		"application/vnd.oci.image.manifest.v1+json",
+		"application/vnd.oci.image.index.v1+json",
+	}, ", ")
+
+	resp, err := c.doManifestRequest(ctx, manifestURL, acceptHeader, "")
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	// If unauthorized, try to get a token and retry
+	if resp.StatusCode == http.StatusUnauthorized {
+		wwwAuth := resp.Header.Get("WWW-Authenticate")
+		if wwwAuth == "" {
+			return fmt.Errorf("unauthorized and no WWW-Authenticate header")
 		}
 
-		_, err = runtime.Pull(c.ctx, pullImage, config.PullPolicyAlways, options)
+		token, err := c.getAuthToken(ctx, registry, repo, wwwAuth)
 		if err != nil {
-			// mount error is expected but we don't need the mounting to
-			// assure the image was reacheable. A error message is also
-			// displayed in the console, but can be ignored.
-			re := regexp.MustCompile(`.*creating mount namespace.*`)
-			if re.FindString(err.Error()) != "" {
-				// check next image
-				continue
-			}
+			return fmt.Errorf("failed to get auth token: %v", err)
+		}
 
-			c.log.Println(fmt.Sprintf("check failed: %s", err.Error()))
+		resp, err = c.doManifestRequest(ctx, manifestURL, acceptHeader, token)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("manifest check failed with status: %d", resp.StatusCode)
+	}
+
+	return nil
+}
+
+// doManifestRequest performs a HEAD request to the manifest URL with optional auth token.
+func (c *QuayCheck) doManifestRequest(ctx context.Context, url, acceptHeader, token string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, "HEAD", url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Accept", acceptHeader)
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+
+	return c.client.Do(req)
+}
+
+// checkImage verifies that all configured tags are accessible via the registry API.
+func (c *QuayCheck) checkImage(ctx context.Context) (CheckResult, error) {
+	c.log.Printf("checking manifest for %s\n", c.getImage())
+
+	for _, tag := range c.tags {
+		if tag == "" {
+			tag = "latest"
+		}
+
+		if err := c.checkManifest(ctx, tag); err != nil {
+			c.log.Printf("[ERROR] %s:%s check failed: %v\n", c.name, tag, err)
 			return CheckResult{1, "Failed", err.Error()}, err
 		}
 	}
@@ -147,24 +216,19 @@ func (c *QuayCheck) pullImage() (CheckResult, error) {
 	return CheckResult{0, "Succeeded", ""}, nil
 }
 
-// Check runs a QuayCheck and return the float64 status required to save the prometheus data.
-func (c *QuayCheck) Check() float64 {
+// Check runs a QuayCheck and returns the float64 status required to save the prometheus data.
+func (c *QuayCheck) Check(ctx context.Context) float64 {
 	var reason string
 
 	c.log.Println("running quay check:", c.name)
-	pull, err := c.pullImage()
+	result, err := c.checkImage(ctx)
 	if err != nil {
 		reason = err.Error()
 	}
-	c.metric.Gauge.Record([]string{c.name}, metrics.FlipValue(pull.code))
-	c.metric.Histogram.Record([]string{c.name, reason, pull.status}, 1)
+	c.metric.Gauge.Record([]string{c.name}, metrics.FlipValue(result.code))
+	c.metric.Histogram.Record([]string{c.name, reason, result.status}, 1)
 
-	return pull.code
-}
-
-// cleans up the tmep dir
-func (c *QuayCheck) cleanUp() error {
-	return os.RemoveAll(c.tmpdir)
+	return result.code
 }
 
 // getImage returns the image parameter of a QuayCheck instance.
