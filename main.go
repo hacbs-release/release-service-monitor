@@ -21,8 +21,9 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"runtime"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/hacbs-release/release-availability-metrics/pkg/checks"
@@ -50,7 +51,7 @@ func collectAndRecord(ctx context.Context, cfg *config.Config) {
 	if pollInterval == 0 {
 		pollInterval = 60
 	}
-	logger.Println(fmt.Sprintf("Poll interval: %d * time.Second", pollInterval))
+	logger.Printf("Poll interval: %d * time.Second\n", pollInterval)
 
 	// registering metrics
 	prefix := cfg.Service.MetricsPrefix
@@ -94,12 +95,6 @@ func collectAndRecord(ctx context.Context, cfg *config.Config) {
 	// instance quay checks, if defined
 	if len(cfg.Checks.Quay) != 0 {
 		for i := 0; i < len(cfg.Checks.Quay); i++ {
-			// the os.TempDir() value can be overwritten with the TMPDIR var
-			tmpdir, err := os.MkdirTemp(os.TempDir(), "quaycheck-")
-			if err != nil {
-				panic(err.Error())
-			}
-			logger.Println(fmt.Sprintf("quay temporary directory is %s", tmpdir))
 			quayCheck := cfg.Checks.Quay[i]
 			username := os.Getenv(fmt.Sprintf("%s_QUAY_USERNAME", strings.ToUpper(quayCheck.Name)))
 			password := os.Getenv(fmt.Sprintf("%s_QUAY_PASSWORD", strings.ToUpper(quayCheck.Name)))
@@ -111,11 +106,9 @@ func collectAndRecord(ctx context.Context, cfg *config.Config) {
 			}
 			auth := checks.NewQuayAuth(username, password)
 			newCheck := checks.NewQuayCheck(
-				ctx,
 				auth,
 				quayCheck.Name,
 				quayCheck.PullSpec,
-				tmpdir,
 				quayCheck.Tags,
 				logger,
 				metric)
@@ -159,35 +152,39 @@ func collectAndRecord(ctx context.Context, cfg *config.Config) {
 	}
 
 	go func() {
+		ticker := time.NewTicker(time.Duration(pollInterval) * time.Second)
+		defer ticker.Stop()
+
+		runChecks := func() {
+			for _, check := range git {
+				check.Check()
+			}
+			for _, check := range _http {
+				check.Check()
+			}
+			for _, check := range quay {
+				check.Check(ctx)
+			}
+		}
+
+		// Run checks immediately on start
+		runChecks()
+
 		for {
-			// run git checks, if defined
-			if len(git) != 0 {
-				for i := 0; i < len(git); i++ {
-					git[i].Check()
-				}
+			select {
+			case <-ctx.Done():
+				logger.Println("shutting down check loop")
+				return
+			case <-ticker.C:
+				runChecks()
 			}
-			// run http checks, if defined
-			if len(_http) != 0 {
-				for i := 0; i < len(_http); i++ {
-					_http[i].Check()
-				}
-			}
-			// run quay checks, if defined
-			if len(quay) != 0 {
-				for i := 0; i < len(quay); i++ {
-					quay[i].Check()
-				}
-			}
-			runtime.GC()
-			time.Sleep(time.Duration(pollInterval) * time.Second)
 		}
 	}()
 }
 
 func main() {
-	var ctx context.Context
-
-	ctx = context.Background()
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
+	defer stop()
 
 	if reexec.Init() {
 		return
@@ -198,7 +195,7 @@ func main() {
 		cfgFilePath = os.Args[1]
 	}
 
-	logger.Println(fmt.Sprintf("loading config from: %s ", cfgFilePath))
+	logger.Printf("loading config from: %s\n", cfgFilePath)
 	cfg, err := config.LoadConfig(cfgFilePath)
 	if err != nil {
 		panic(err)
@@ -211,9 +208,26 @@ func main() {
 	if listenPort == 0 {
 		listenPort = 8080
 	}
-	logger.Println(fmt.Sprintf("server starting at :%d", listenPort))
-	err = http.ListenAndServe(fmt.Sprintf(":%d", listenPort), nil)
-	if err != nil {
-		logger.Println(err.Error())
+
+	server := &http.Server{
+		Addr: fmt.Sprintf(":%d", listenPort),
 	}
+
+	go func() {
+		logger.Printf("server starting at :%d\n", listenPort)
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.Println(err.Error())
+		}
+	}()
+
+	<-ctx.Done()
+	logger.Println("shutting down server")
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		logger.Printf("server shutdown error: %v\n", err)
+	}
+	logger.Println("server stopped")
 }
