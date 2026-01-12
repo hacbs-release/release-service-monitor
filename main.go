@@ -30,8 +30,6 @@ import (
 	"github.com/hacbs-release/release-availability-metrics/pkg/config"
 	"github.com/hacbs-release/release-availability-metrics/pkg/metrics"
 	"github.com/prometheus/client_golang/prometheus"
-
-	"github.com/containers/storage/pkg/reexec"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
@@ -185,10 +183,6 @@ func collectAndRecord(ctx context.Context, cfg *config.Config) {
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
-
-	if reexec.Init() {
-		return
-	}
 
 	cfgFilePath := "server-config.yaml"
 	if len(os.Args) > 1 {

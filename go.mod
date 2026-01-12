@@ -3,7 +3,6 @@ module github.com/hacbs-release/release-availability-metrics
 go 1.22.0
 
 require (
-	github.com/containers/storage v1.54.0
 	github.com/go-git/go-git/v5 v5.12.0
 	github.com/prometheus/client_golang v1.19.1
 	gopkg.in/yaml.v3 v3.0.1
