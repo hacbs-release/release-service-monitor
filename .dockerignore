@@ -1,2 +1,3 @@
-build
+.git
+build/
 server-config.yaml

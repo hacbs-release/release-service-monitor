@@ -6,7 +6,7 @@ all: fmt build
 .PHONY: build
 build:
 	$(shell mkdir -p build)
-	go build -tags exclude_graphdriver_btrfs,btrfs_noversion -o build/$(progname)
+	go build -o build/$(progname)
 
 fmt:
 	gofmt -s -w .

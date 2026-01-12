@@ -1,11 +1,5 @@
-# Build the manager binary
-FROM registry.access.redhat.com/ubi9/ubi:9.4-1123.1719560047 as builder
+FROM registry.access.redhat.com/ubi9/go-toolset:9.7-1767788444 as builder
 
-RUN yum -y install \
- golang \
- gpgme-devel
-
-# Copy the Go Modules manifests
 COPY go.mod go.mod
 COPY go.sum go.sum
 # cache deps before building and copying source so that we don't need to re-download as much
@@ -13,17 +7,19 @@ COPY go.sum go.sum
 RUN go mod download
 
 # Copy the go source
-COPY main.go main.go
-COPY pkg pkg
+COPY . .
 
 # Build
-RUN GOOS=linux GOARCH=amd64 go build -tags exclude_graphdriver_btrfs,btrfs_noversion -a -o metrics-server main.go
+RUN GOOS=linux GOARCH=amd64 go build -a -o metrics-server .
 
 # Use ubi-micro as minimal base image to package the manager binary
 # See https://catalog.redhat.com/software/containers/ubi9/ubi-micro/615bdf943f6014fa45ae1b58
-FROM registry.access.redhat.com/ubi9/ubi:9.5
+FROM registry.access.redhat.com/ubi9/ubi-micro:9.7-1766049073
+
 COPY policy.json /etc/containers/
-COPY --from=builder /metrics-server /bin/
+COPY --from=builder /opt/app-root/src/metrics-server /bin/
+COPY --from=builder /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem /etc/pki/ca-trust/extracted/pem/
+COPY --from=builder /etc/pki/tls/certs/ca-bundle.crt /etc/pki/tls/certs/
 
 # It is mandatory to set these labels
 LABEL name="Konflux Release Service"
