@@ -16,6 +16,7 @@ limitations under the License.
 package checks
 
 import (
+	"context"
 	"crypto/tls"
 	"encoding/base64"
 	"fmt"
@@ -41,11 +42,21 @@ type HttpCheck struct {
 	path     string
 	log      *log.Logger
 	metric   metrics.CompositeMetric
+	client   *http.Client
 }
 
 // NewHttpCheck returns a new instance of HttpCheck.
 func NewHttpCheck(name, username, password, url, cert, key string, insecure, follow bool, log *log.Logger,
-	metric metrics.CompositeMetric) *HttpCheck {
+	metric metrics.CompositeMetric,
+) *HttpCheck {
+	clientTLSCert, _ := tls.X509KeyPair([]byte(cert), []byte(key))
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: insecure,
+			Certificates:       []tls.Certificate{clientTLSCert},
+		},
+	}
+
 	newCheck := &HttpCheck{
 		name:     name,
 		username: username,
@@ -57,6 +68,15 @@ func NewHttpCheck(name, username, password, url, cert, key string, insecure, fol
 		follow:   follow,
 		log:      log,
 		metric:   metric,
+		client: &http.Client{
+			Transport: tr,
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				if !follow {
+					return http.ErrUseLastResponse
+				}
+				return nil
+			},
+		},
 	}
 	newCheck.parseUrl()
 
@@ -74,41 +94,26 @@ func (c *HttpCheck) parseUrl() {
 	}
 }
 
-// fetchRemoteFile connects to a remote git url and return a instance of CheckResult and nil in case of success or a
+// checkUrl connects to a remote url and returns an instance of CheckResult and nil in case of success or an
 // instance of CheckResult and error in case of failure.
-func (c *HttpCheck) checkUrl() (CheckResult, error) {
-	clientTLSCert, err := tls.X509KeyPair([]byte(c.cert), []byte(c.key))
-	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{
-			InsecureSkipVerify: c.insecure,
-			Certificates:       []tls.Certificate{clientTLSCert},
-		},
+func (c *HttpCheck) checkUrl(ctx context.Context) (CheckResult, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", c.url, nil)
+	if err != nil {
+		c.log.Println(fmt.Sprintf("%s check failed (%s)", c.name, err.Error()))
+		return CheckResult{1, "Failed", err.Error()}, err
 	}
-
-	client := &http.Client{
-		Transport: tr,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			if c.follow == false {
-				return http.ErrUseLastResponse
-			} else {
-				return nil
-			}
-		},
-	}
-
-	req, _ := http.NewRequest("GET", c.url, nil)
 	if c.username != "" && c.password != "" {
 		data := []byte(fmt.Sprintf("%s:%s", c.username, c.password))
 		encodedCredentials := make([]byte, base64.StdEncoding.EncodedLen(len(data)))
 		base64.StdEncoding.Encode(encodedCredentials, data)
 		req.Header.Add("Authorization", fmt.Sprintf("Basic %s", encodedCredentials))
 	}
-	resp, err := client.Do(req)
-
+	resp, err := c.client.Do(req)
 	if err != nil {
 		c.log.Println(fmt.Sprintf("%s check failed (%s)", c.name, err.Error()))
 		return CheckResult{1, "Failed", err.Error()}, err
 	}
+	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
 		c.log.Println(fmt.Sprintf("%s check failed (%s)", c.name, resp.Status))
@@ -122,11 +127,11 @@ func (c *HttpCheck) checkUrl() (CheckResult, error) {
 
 // Check runs a check and returns a float64 of the check result. The float64 is required to push values
 // to prometheus.
-func (c *HttpCheck) Check() float64 {
+func (c *HttpCheck) Check(ctx context.Context) float64 {
 	var reason string
 
 	c.log.Println("running HTTP check:", c.name)
-	res, err := c.checkUrl()
+	res, err := c.checkUrl(ctx)
 	if err != nil {
 		reason = err.Error()
 	}
