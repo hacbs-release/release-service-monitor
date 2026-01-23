@@ -155,10 +155,10 @@ func collectAndRecord(ctx context.Context, cfg *config.Config) {
 
 		runChecks := func() {
 			for _, check := range git {
-				check.Check()
+				check.Check(ctx)
 			}
 			for _, check := range _http {
-				check.Check()
+				check.Check(ctx)
 			}
 			for _, check := range quay {
 				check.Check(ctx)
